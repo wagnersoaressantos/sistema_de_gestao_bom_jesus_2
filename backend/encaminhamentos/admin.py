@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Especialidade, Procedimento, Encaminhamento
+from .models import AnexoEncaminhamento, Especialidade, Procedimento, Encaminhamento
 
 
 # Configuração do admin para Especialidade
@@ -23,6 +23,15 @@ class ProcedimentoAdmin(admin.ModelAdmin):
         'especialidade',
     )
 
+# -------------------------------------------------
+# Inline para mostrar anexos no encaminhamento
+# -------------------------------------------------
+class AnexoInline(admin.TabularInline):
+
+    model = AnexoEncaminhamento
+
+    extra = 0
+
 
 class EncaminhamentoAdmin(admin.ModelAdmin):
 
@@ -35,8 +44,17 @@ class EncaminhamentoAdmin(admin.ModelAdmin):
         'procedimento',
         'prioridade',
         'status',
-        'data_solicitacao'
+        'data_solicitacao',
+        "possui_anexo",
+        "posicao_fila"
     )
+
+
+     # mostra anexos dentro da tela do encaminhamento
+    inlines = [
+
+        AnexoInline
+    ]
     # Filtros laterais
     list_filter = (
         'tipo',
@@ -50,6 +68,37 @@ class EncaminhamentoAdmin(admin.ModelAdmin):
     search_fields = (
         'paciente__nome',
     )
+
+    # -------------------------------------------------
+    # Verifica se o encaminhamento possui anexos
+    # obj é o objeto da linha do banco
+    # -------------------------------------------------
+    def possui_anexo(self, obj):
+
+        return obj.anexos.exists()
+
+    # mostra ícone ✔ ou ✖ no admin
+    possui_anexo.boolean = True
+
+    # nome da coluna
+    possui_anexo.short_description = "Tem anexo?"
+
+# -------------------------------------------------
+# Admin dos anexos
+# -------------------------------------------------
+@admin.register(AnexoEncaminhamento)
+class AnexoEncaminhamentoAdmin(admin.ModelAdmin):
+
+    # campos mostrados na lista
+    list_display = (
+
+        "id",
+        "encaminhamento",
+        "descricao",
+        "data_upload"
+
+    )
+
 
 
 
