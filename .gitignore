@@ -1,0 +1,31 @@
+# Python / Django
+**__pycache__
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+.env
+db.sqlite3
+media/
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.packages
+build/
+
+# Android / iOS específicos
+.gradle/
+local.properties
+**.keystore
+**.jks
+Section-iOS/Flutter/Generated.xcconfig
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+backend/encaminhamentos/__pycache__

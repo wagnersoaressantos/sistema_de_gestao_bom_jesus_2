@@ -28,19 +28,23 @@ class EncaminhamentoAdmin(admin.ModelAdmin):
 
     # Colunas exibidas na lista
     list_display = (
+
         'paciente',
+        'tipo',
+        'especialidade',
         'procedimento',
         'prioridade',
         'status',
         'data_solicitacao'
     )
-
     # Filtros laterais
     list_filter = (
+        'tipo',
         'status',
         'prioridade',
-        'procedimento'
+        'especialidade'
     )
+
 
     # Campo de busca
     search_fields = (

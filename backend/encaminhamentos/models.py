@@ -1,6 +1,8 @@
 from django.db import models
-from django.core.exceptions import ValidationError
+from django.utils.timezone import now
 from pacientes.models import Paciente
+
+
 
 class Especialidade(models.Model):
 
@@ -23,81 +25,170 @@ class Procedimento(models.Model):
 
 class Encaminhamento(models.Model):
 
-    # Opções de status do encaminhamento
-    STATUS_CHOICES = [
-        ("solicitado", "Solicitado"),
-        ("aguardando", "Aguardando Marcação"),
-        ("guia_disponivel", "Guia Disponível"),
-        ("realizado", "Realizado"),
+    # -------------------------------------------------
+    # Tipo de encaminhamento
+    # -------------------------------------------------
+    TIPO_ENCAMINHAMENTO = [
+
+        ('especialista', 'Especialista'),
+
+        ('exame', 'Exame'),
+
     ]
 
-    # Paciente relacionado ao encaminhamento
+    # -------------------------------------------------
+    # Status do encaminhamento
+    # -------------------------------------------------
+    STATUS_CHOICES = [
+
+        ('solicitado', 'Solicitado'),
+
+        ('aguardando', 'Aguardando Marcação'),
+
+        ('guia_disponivel', 'Guia Disponível'),
+
+        ('entregue', 'Entregue'),
+
+    ]
+
+    # -------------------------------------------------
+    # Prioridade do encaminhamento
+    # -------------------------------------------------
+    PRIORIDADE_CHOICES = [
+
+        ('normal', 'Normal'),
+
+        ('urgente', 'Urgente'),
+
+        ('preferencial', 'Preferencial'),
+
+    ]
+
+    # -------------------------------------------------
+    # Paciente relacionado
+    # -------------------------------------------------
     paciente = models.ForeignKey(
         Paciente,
         on_delete=models.CASCADE
     )
 
-    # Procedimento solicitado (ECG, ECO, Ultrassom, etc)
-    procedimento = models.ForeignKey(
-        Procedimento,
+    # -------------------------------------------------
+    # Tipo do encaminhamento
+    # especialista ou exame
+    # -------------------------------------------------
+    tipo = models.CharField(
+        max_length=20,
+        choices=TIPO_ENCAMINHAMENTO,
+        default='exame'
+    )
+
+    # -------------------------------------------------
+    # Especialidade relacionada
+    # cardiologia, ortopedia, etc
+    # -------------------------------------------------
+    especialidade = models.ForeignKey(
+        'Especialidade',
         on_delete=models.CASCADE
     )
 
-    # Profissional que solicitou o encaminhamento
-    profissional = models.CharField(max_length=200)
-
-    # Data da solicitação
-    data_solicitacao = models.DateField(auto_now_add=True)
-
-    # Opções de prioridade do encaminhamento
-    PRIORIDADE_CHOICES = [
-    ("normal", "Normal"),
-    ("urgente", "Urgente"),
-    ("preferencial", "Preferencial"),
-    ]
-
-    # Prioridade do encaminhamento
-    prioridade = models.CharField(
-    max_length=20,
-    choices=PRIORIDADE_CHOICES,
-    default="normal"
+    # -------------------------------------------------
+    # Procedimento (opcional)
+    # usado quando for exame
+    # -------------------------------------------------
+    procedimento = models.ForeignKey(
+        'Procedimento',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True
     )
 
-    # Status atual do encaminhamento
+    # -------------------------------------------------
+    # Profissional que solicitou
+    # -------------------------------------------------
+    profissional = models.CharField(
+        max_length=200
+    )
+
+    # -------------------------------------------------
+    # Prioridade
+    # -------------------------------------------------
+    prioridade = models.CharField(
+        max_length=20,
+        choices=PRIORIDADE_CHOICES,
+        default='normal'
+    )
+
+    # -------------------------------------------------
+    # Status atual
+    # -------------------------------------------------
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
-        default="solicitado"
+        default='solicitado'
     )
 
-    # Observações adicionais
-    observacao = models.TextField(blank=True, null=True)
+    # -------------------------------------------------
+    # Observações
+    # -------------------------------------------------
+    observacao = models.TextField(
+        blank=True,
+        null=True
+    )
 
-    # Data de criação no sistema
-    criado_em = models.DateTimeField(auto_now_add=True)
+    # -------------------------------------------------
+    # Data da solicitação
+    # -------------------------------------------------
+    data_solicitacao = models.DateField(
+    default=now
+)
+    # -------------------------------------------------
+    # Posição do paciente na fila
+    # -------------------------------------------------
+    posicao_fila = models.IntegerField(
+        null=True,
+        blank=True
+    )
 
+
+    # -------------------------------------------------
+    # Representação do objeto
+    # -------------------------------------------------
     def __str__(self):
-        return f"{self.paciente.nome} - {self.procedimento}"
 
-    # ---------------------------------------------------------
-    # Validação para evitar encaminhamento duplicado
-    # ---------------------------------------------------------
-    def clean(self):
+        return f"{self.paciente} - {self.especialidade}"
 
-        # Verifica se já existe encaminhamento para
-        # o mesmo paciente e mesmo procedimento
-        existe = Encaminhamento.objects.filter(
-            paciente=self.paciente,
-            procedimento=self.procedimento,
-            status__in=[
-                "solicitado",
-                "aguardando",
-                "guia_disponivel"
-            ]
-        ).exclude(id=self.id).exists()
+    # -------------------------------------------------
+    # Função para recalcular a fila
+    # -------------------------------------------------
 
-        # Se existir, bloqueia o cadastro
-        if existe:
-            raise ValidationError(
-                "Este paciente já possui um encaminhamento ativo para esse procedimento."
-            )
+    def save(self, *args, **kwargs):
+
+        novo = self.pk is None
+
+        super().save(*args, **kwargs)
+
+        # Se foi criado um novo encaminhamento
+        if novo:
+
+            recalcular_fila(self.especialidade)
+
+        # Se mudou para Guia Disponivel
+        if self.status == 'guia_disponivel':
+
+            recalcular_fila(self.especialidade)
+
+def recalcular_fila(especialidade):
+
+        encaminhamentos = Encaminhamento.objects.filter(
+
+        especialidade=especialidade,
+
+        status__in=['solicitado', 'aguardando']
+
+        ).order_by('data_solicitacao')
+
+        # Reorganiza posições
+        for index, enc in enumerate(encaminhamentos, start=1):
+
+            enc.posicao_fila = index
+            enc.save(update_fields=['posicao_fila'])

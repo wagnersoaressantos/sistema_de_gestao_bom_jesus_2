@@ -16,6 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from encaminhamentos.views import demanda_reprimida
+from encaminhamentos.views import tempo_medio_espera
 from rest_framework.routers import DefaultRouter
 from pacientes.views import PacienteViewSet
 from encaminhamentos.views import (
@@ -38,7 +39,6 @@ router.register(r'encaminhamentos', EncaminhamentoViewSet)
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
-
-    # Página de relatório de demanda reprimida
-    path('demanda/', demanda_reprimida, name='demanda_reprimida'),
+    path('api/demanda/', demanda_reprimida),
+    path('api/tempo-espera/', tempo_medio_espera),
 ]
