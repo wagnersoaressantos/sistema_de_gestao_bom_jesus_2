@@ -15,8 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from encaminhamentos.views import demanda_reprimida
-from encaminhamentos.views import tempo_medio_espera
+from encaminhamentos.views import AnexoEncaminhamentoViewSet, demanda_reprimida, painel_fila, tempo_medio_espera
 from rest_framework.routers import DefaultRouter
 from pacientes.views import PacienteViewSet
 from encaminhamentos.views import (
@@ -25,6 +24,10 @@ from encaminhamentos.views import (
     EncaminhamentoViewSet
 )
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
+
+
 
 
 router = DefaultRouter()
@@ -33,6 +36,8 @@ router.register(r'pacientes', PacienteViewSet)
 router.register(r'especialidades', EspecialidadeViewSet)
 router.register(r'procedimentos', ProcedimentoViewSet)
 router.register(r'encaminhamentos', EncaminhamentoViewSet)
+router.register(r'anexos',AnexoEncaminhamentoViewSet)
+
 
 
 
@@ -41,4 +46,14 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('api/demanda/', demanda_reprimida),
     path('api/tempo-espera/', tempo_medio_espera),
+    path('api/painel/', painel_fila),
 ]
+
+# -------------------------------------------------
+# Permite acessar arquivos enviados
+# -------------------------------------------------
+if settings.DEBUG:
+    urlpatterns += static(
+        settings.MEDIA_URL,
+        document_root=settings.MEDIA_ROOT
+    )

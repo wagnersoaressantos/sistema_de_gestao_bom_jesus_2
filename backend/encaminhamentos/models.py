@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.db import models
 from django.utils.timezone import now
 from pacientes.models import Paciente
@@ -48,6 +50,7 @@ class Encaminhamento(models.Model):
         ('guia_disponivel', 'Guia Disponível'),
 
         ('entregue', 'Entregue'),
+        ('resultado_disponivel', 'Resultado Disponível'),
 
     ]
 
@@ -149,6 +152,23 @@ class Encaminhamento(models.Model):
         blank=True
     )
 
+    # -------------------------------------------------
+    # Data em que o exame foi realizado
+    # -------------------------------------------------
+    data_entregue = models.DateField(
+
+        null=True,
+        blank=True
+    )
+    # -------------------------------------------------
+    # Data em que o exame foi realizado
+    # -------------------------------------------------
+    data_resultado_disponivel = models.DateField(
+
+        null=True,
+        blank=True
+    )
+
 
     # -------------------------------------------------
     # Representação do objeto
@@ -165,30 +185,235 @@ class Encaminhamento(models.Model):
 
         novo = self.pk is None
 
+         # verifica status antigo
+        status_antigo = None
+
+        if not novo:
+
+            status_antigo = Encaminhamento.objects.get(pk=self.pk).status
+
         super().save(*args, **kwargs)
+
+
+
+        # -------------------------------------------------
+        # registra histórico
+        # -------------------------------------------------
+        if novo or status_antigo != self.status:
+
+            HistoricoEncaminhamento.objects.create(
+
+            encaminhamento=self,
+            status=self.status
+        )
 
         # Se foi criado um novo encaminhamento
         if novo:
 
-            recalcular_fila(self.especialidade)
+            recalcular_fila(self.especialidade, self.procedimento)
 
         # Se mudou para Guia Disponivel
-        if self.status == 'guia_disponivel':
+        if self.status in ['guia_disponivel', 'entregue', 'resultado_disponivel']:
 
-            recalcular_fila(self.especialidade)
+            recalcular_fila(self.especialidade, self.procedimento)
+    
+    def prioridade_valor(self):
 
-def recalcular_fila(especialidade):
+        mapa = {
+            'urgente': 1,
+            'preferencial': 2,
+            'normal': 3
+        }
+        return mapa.get(self.prioridade, 3)
+    
+    # -------------------------------------------------
+    # Calcula o tempo entre as etapas do encaminhamento
+    # -------------------------------------------------
+    def calcular_tempos(self):
 
-        encaminhamentos = Encaminhamento.objects.filter(
+        historico = self.historico.order_by('data')
+
+        tempos = []
+
+        anterior = None
+
+        for item in historico:
+
+            if anterior:
+
+                dias = (item.data - anterior.data).days
+
+                tempos.append({
+
+                    "de": anterior.status,
+                    "para": item.status,
+                    "dias": dias
+
+                })
+
+            anterior = item
+
+        return tempos
+    
+    
+# -------------------------------------------------
+# Histórico de status do encaminhamento
+# -------------------------------------------------
+class HistoricoEncaminhamento(models.Model):
+
+    encaminhamento = models.ForeignKey(
+        Encaminhamento,
+        on_delete=models.CASCADE,
+        related_name="historico"
+    )
+
+    status = models.CharField(
+        max_length=20
+    )
+
+    data = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    observacao = models.TextField(
+        blank=True,
+        null=True
+    )
+
+    def __str__(self):
+
+        return f"{self.encaminhamento.id} - {self.status}"
+
+# -------------------------------------------------
+# Arquivos anexados ao encaminhamento
+# Ex: resultado de exame, laudo, receita etc
+# -------------------------------------------------
+class AnexoEncaminhamento(models.Model):
+
+    # -------------------------------------------------
+    # Tipos de anexos
+    # -------------------------------------------------
+    TIPO_ANEXO = [
+
+    ("solicitacao", "Solicitação"),
+
+    ("resultado", "Resultado do Exame"),
+
+    ("outro", "Outro Documento")
+    ]
+    
+    # -------------------------------------------------
+    # Tipo do documento anexado
+    # -------------------------------------------------
+    tipo = models.CharField(
+
+        max_length=20,
+
+        choices=TIPO_ANEXO,
+
+        default="resultado"
+    )
+
+    # -------------------------------------------------
+    # Encaminhamento relacionado
+    # Um encaminhamento pode ter vários arquivos
+    # -------------------------------------------------
+    encaminhamento = models.ForeignKey(
+
+        Encaminhamento,
+        on_delete=models.CASCADE,
+
+        # permite acessar:
+        # encaminhamento.anexos.all()
+        related_name="anexos"
+
+    )
+
+    # -------------------------------------------------
+    # Arquivo enviado
+    # Pode ser PDF, imagem, etc
+    # -------------------------------------------------
+    arquivo = models.FileField(
+
+        upload_to="resultados_exames/"
+    )
+
+    # -------------------------------------------------
+    # Descrição opcional do arquivo
+    # Ex: "Resultado ECG", "Laudo médico"
+    # -------------------------------------------------
+    descricao = models.CharField(
+
+        max_length=200,
+        blank=True,
+        null=True
+    )
+
+    # -------------------------------------------------
+    # Data do envio do arquivo
+    # -------------------------------------------------
+    data_upload = models.DateTimeField(
+
+        auto_now_add=True
+    )
+
+    # -------------------------------------------------
+    # Representação do objeto
+    # -------------------------------------------------
+    def __str__(self):
+
+        return f"Anexo {self.id} - Encaminhamento {self.encaminhamento.id}"
+
+     # -------------------------------------------------
+    # Automação ao anexar resultado
+    # -------------------------------------------------
+    def save(self, *args, **kwargs):
+
+        # verifica se é um novo anexo
+        novo = self.pk is None
+
+        # salva o anexo normalmente
+        super().save(*args, **kwargs)
+
+        # se for novo anexo
+        if novo:
+
+            enc = self.encaminhamento
+
+            # muda status para realizado
+            enc.status = "resultado_disponivel"
+
+            # salva data de realização
+            enc.data_realizacao = date.today()
+
+            enc.save()
+
+
+
+
+def recalcular_fila(especialidade, procedimento):
+
+    encaminhamentos = Encaminhamento.objects.filter(
 
         especialidade=especialidade,
+        procedimento=procedimento,
 
         status__in=['solicitado', 'aguardando']
 
-        ).order_by('data_solicitacao')
+    ).order_by('data_solicitacao')
 
-        # Reorganiza posições
-        for index, enc in enumerate(encaminhamentos, start=1):
+     # ordena por prioridade e data
+    encaminhamentos = sorted(
 
-            enc.posicao_fila = index
-            enc.save(update_fields=['posicao_fila'])
+        encaminhamentos,
+
+        key=lambda x: (x.prioridade_valor(), x.data_solicitacao)
+    )
+
+    # Reorganiza posições
+    for index, enc in enumerate(encaminhamentos, start=1):
+
+        enc.posicao_fila = index
+
+        enc.save(update_fields=['posicao_fila'])
+
