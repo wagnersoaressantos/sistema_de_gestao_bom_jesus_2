@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'pacientes',
     'encaminhamentos',
     'notificacoes',
+    'servicos',
 ]
 
 MIDDLEWARE = [
