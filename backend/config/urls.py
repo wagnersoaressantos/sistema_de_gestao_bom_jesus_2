@@ -17,7 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from encaminhamentos.views import AnexoEncaminhamentoViewSet, demanda_reprimida, painel_fila, tempo_medio_espera
 from rest_framework.routers import DefaultRouter
-from pacientes.views import PacienteViewSet
+from pacientes.views import PacienteViewSet, historico_paciente
 from encaminhamentos.views import (
     EspecialidadeViewSet,
     ProcedimentoViewSet,
@@ -47,6 +47,8 @@ urlpatterns = [
     path('api/demanda/', demanda_reprimida),
     path('api/tempo-espera/', tempo_medio_espera),
     path('api/painel/', painel_fila),
+    path('api/pacientes/<int:paciente_id>/historico/',historico_paciente),
+
 ]
 
 # -------------------------------------------------
