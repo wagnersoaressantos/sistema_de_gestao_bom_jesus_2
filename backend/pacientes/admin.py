@@ -1,30 +1,66 @@
 from django.contrib import admin
-from .models import Paciente
+from .models import Paciente, MicroArea
 
 
-# Classe que configura como o modelo Paciente aparece no painel admin
+# ======================================================
+# ADMIN MICROÁREA
+# ======================================================
+
+@admin.register(MicroArea)
+class MicroAreaAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "id",
+        "microarea",
+        "agente",
+        "ativa"
+    )
+
+    search_fields = (
+        "microarea",
+        "agente"
+    )
+
+    list_filter = (
+        "ativa",
+    )
+
+
+# ======================================================
+# ADMIN PACIENTE
+# ======================================================
+
+@admin.register(Paciente)
 class PacienteAdmin(admin.ModelAdmin):
 
-    # Campos que aparecem na lista de pacientes
+    # campos exibidos na lista
     list_display = (
-        'nome',
-        'cpf',
-        'data_nascimento',
-        'telefone',
-        'microarea'
+        "id",
+        "nome",
+        "cpf",
+        "cns",
+        "microarea",
+        "vinculo",
+        "telefone",
+        "ativo"
     )
 
-    # Permite buscar pacientes pelo nome ou CPF
-    search_fields = (
-        'nome',
-        'cpf'
-    )
-
-    # Adiciona filtros na lateral direita
+    # filtros laterais
     list_filter = (
-        'microarea',
+        "microarea",
+        "vinculo",
+        "ativo"
     )
 
+    # busca
+    search_fields = (
+        "nome",
+        "cpf",
+        "cns",
+        "telefone"
+    )
 
-# Registra o modelo Paciente com a configuração acima
-admin.site.register(Paciente, PacienteAdmin)
+    # ordenação
+    ordering = (
+        "nome",
+    )

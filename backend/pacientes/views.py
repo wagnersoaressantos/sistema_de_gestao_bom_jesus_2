@@ -1,77 +1,227 @@
 from django.shortcuts import render
-from rest_framework import viewsets
-from rest_framework.decorators import api_view
+import tempfile
+
+from rest_framework.filters import SearchFilter, OrderingFilter
+from rest_framework.generics import GenericAPIView
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework import status, viewsets
+from rest_framework.views import APIView
 from rest_framework.response import Response
-from encaminhamentos.models import Encaminhamento
-from servicos.models import ServicoSolicitado
+from rest_framework.permissions import IsAuthenticated
+from django.db.models import Q
+from .models import Paciente, MicroArea
+from .serializers import PacienteSerializer, MicroAreaSerializer, ImportacaoPacienteSerializer
+from .services.importador_csv import importar_pacientes_csv
 
-from .models import Paciente
-from .serializers import PacienteSerializer
 
 
-# ViewSet cria automaticamente:
-# GET, POST, PUT, DELETE
+
+
+# ======================================================
+# API MICROÁREA
+# ======================================================
+
+class MicroAreaViewSet(viewsets.ModelViewSet):
+
+    """
+    API responsável por gerenciar microáreas da unidade
+    """
+
+    queryset = MicroArea.objects.all()
+
+    serializer_class = MicroAreaSerializer
+
+    permission_classes = [IsAuthenticated]
+
+# ======================================================
+# API PACIENTES
+# ======================================================
+
 class PacienteViewSet(viewsets.ModelViewSet):
 
-    # busca todos os pacientes
-    queryset = Paciente.objects.all()
+    """
+    API responsável por gerenciar pacientes
+    """
 
-    # usa o serializer que criamos
+    queryset = Paciente.objects.select_related("microarea")
+
     serializer_class = PacienteSerializer
 
+    permission_classes = [IsAuthenticated]
+
+    filter_backends = [SearchFilter,OrderingFilter]
+    search_fields = ["nome","cpf","cns"]
+    ordering_fields = ["nome","data_nascimento"]
+    ordering = ["nome"]
+
+# class ImportarPacientesView(APIView):
+#
+#     permission_classes = [IsAuthenticated]
+#
+#     def post(self, request):
+#
+#         arquivo = request.FILES.get("arquivo")
+#
+#         if not arquivo:
+#
+#             return Response(
+#                 {"erro": "Arquivo não enviado"},
+#                 status=status.HTTP_400_BAD_REQUEST
+#             )
+#
+#         # salva temporariamente
+#         with tempfile.NamedTemporaryFile(delete=False) as temp:
+#
+#             for chunk in arquivo.chunks():
+#                 temp.write(chunk)
+#
+#             caminho = temp.name
+#
+#         # executa importação
+#         importar_pacientes_csv(caminho)
+#
+#         return Response({
+#             "mensagem": "Importação realizada com sucesso"
+#         })
+#
+# from rest_framework.views import APIView
+# from rest_framework.response import Response
+# from rest_framework.permissions import IsAuthenticated
+# from rest_framework import status
+# from rest_framework.parsers import MultiPartParser, FormParser
+#
+# import tempfile
+#
+# from .services.importador_csv import importar_pacientes_csv
+#
+#
+# class ImportarPacientesView(APIView):
+#
+#     permission_classes = [IsAuthenticated]
+#
+#     parser_classes = [MultiPartParser, FormParser]
+#
+#     def post(self, request):
+#
+#         arquivo = request.FILES.get("arquivo")
+#
+#         if not arquivo:
+#
+#             return Response(
+#                 {"erro": "Arquivo não enviado"},
+#                 status=status.HTTP_400_BAD_REQUEST
+#             )
+#
+#         with tempfile.NamedTemporaryFile(delete=False) as temp:
+#
+#             for chunk in arquivo.chunks():
+#                 temp.write(chunk)
+#
+#             caminho = temp.name
+#
+#         importar_pacientes_csv(caminho)
+#
+#         return Response({
+#             "mensagem": "Importação realizada com sucesso"
+#         })
+
+#
+#
+# class ImportarPacientesView(APIView):
+#
+#     permission_classes = [IsAuthenticated]
+#
+#     parser_classes = [MultiPartParser, FormParser]
+#
+#     def post(self, request):
+#
+#         serializer = ImportacaoPacienteSerializer(data=request.data)
+#
+#         if not serializer.is_valid():
+#             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+#
+#         arquivo = serializer.validated_data["arquivo"]
+#
+#         with tempfile.NamedTemporaryFile(delete=False) as temp:
+#
+#             for chunk in arquivo.chunks():
+#                 temp.write(chunk)
+#
+#             caminho = temp.name
+#
+#         importar_pacientes_csv(caminho)
+#
+#         return Response({
+#             "mensagem": "Importação realizada com sucesso"
+#         })
+#
 
 
-@api_view(['GET'])
-def historico_paciente(request, paciente_id):
+class BuscarPacienteView(GenericAPIView):
 
-    historico = []
+    def get(self, request):
 
-    # -------------------------------------------------
-    # Buscar encaminhamentos
-    # -------------------------------------------------
-    encaminhamentos = Encaminhamento.objects.filter(
+        termo = request.GET.get("q", "").strip()
 
-        paciente_id=paciente_id
-    )
+        if len(termo) < 3:
+            return Response({
+                "mensagem": "Digite pelo menos 3 caracteres"
+            })
 
-    for e in encaminhamentos:
+        pacientes = (
+            Paciente.objects
+            .filter(
+                Q(nome__icontains=termo) |
+                Q(cpf__icontains=termo) |
+                Q(cns__icontains=termo)
+            )
+            .select_related("microarea")
+            .order_by("nome")[:10]
+        )
 
-        historico.append({
+        dados = [
+            {
+                "id": p.id,
+                "nome": p.nome,
+                "cpf": p.cpf,
+                "cns": p.cns,
+                "label": f"{p.nome} - CPF: {p.cpf or '---'}"
+            }
+            for p in pacientes
+        ]
 
-            "tipo": "encaminhamento",
+        return Response(dados)
 
-            "descricao": f"{e.especialidade.nome} - {e.procedimento.nome if e.procedimento else 'Consulta'}",
+class ImportarPacientesView(GenericAPIView):
 
-            "status": e.status,
+    serializer_class = ImportacaoPacienteSerializer
 
-            "data": e.data_solicitacao
+    permission_classes = [IsAuthenticated]
 
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+
+        serializer = self.get_serializer(data=request.data)
+
+        serializer.is_valid(raise_exception=True)
+
+        arquivo = serializer.validated_data["arquivo"]
+
+        with tempfile.NamedTemporaryFile(delete=False) as temp:
+
+            for chunk in arquivo.chunks():
+                temp.write(chunk)
+
+            caminho = temp.name
+
+        resultado = importar_pacientes_csv(caminho)
+
+        return Response({
+            "mensagem": "Importação realizada com sucesso",
+            "resultado": resultado
         })
 
-    # -------------------------------------------------
-    # Buscar serviços administrativos
-    # -------------------------------------------------
-    servicos = ServicoSolicitado.objects.filter(
 
-        paciente_id=paciente_id
-    )
-
-    for s in servicos:
-
-        historico.append({
-
-            "tipo": "servico",
-
-            "descricao": s.get_tipo_display(),
-
-            "status": s.status,
-
-            "data": s.data_solicitacao
-
-        })
-
-    # ordena pela data
-    historico.sort(key=lambda x: x["data"], reverse=True)
-
-    return Response(historico)
-
+def tela_busca_paciente(request):
+    return render(request, "buscar_paciente.html")

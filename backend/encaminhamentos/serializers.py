@@ -1,190 +1,123 @@
 from rest_framework import serializers
-from .models import AnexoEncaminhamento, Especialidade, HistoricoEncaminhamento, Procedimento, Encaminhamento
+from .models import Especialidade, Encaminhamento, IndicadorDiario, STATUS_FILA
 
 
-class HistoricoEncaminhamentoSerializer(serializers.ModelSerializer):
-
+class IndicadorDiarioSerializer(serializers.ModelSerializer):
     class Meta:
+        model = IndicadorDiario
+        fields = "__all__"
 
-        model = HistoricoEncaminhamento
-
-        fields = [
-
-            "status",
-            "data",
-            "observacao"
-        ]
-
-# ----------------------------------------------
-# Serializer de especialidade
-# Converte objeto do banco para JSON
-# ----------------------------------------------
 class EspecialidadeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Especialidade
-        fields = ['id', 'nome']
+        fields = "__all__"
 
 
-# ----------------------------------------------
-# Serializer de procedimento
-# ----------------------------------------------
-class ProcedimentoSerializer(serializers.ModelSerializer):
 
-    class Meta:
-        model = Procedimento
-        fields = ['id', 'nome', 'especialidade']
-
-# -------------------------------------------------
-# Serializer responsável pelo upload de arquivos
-# -------------------------------------------------
-class AnexoEncaminhamentoSerializer(serializers.ModelSerializer):
-
-    class Meta:
-
-        model = AnexoEncaminhamento
-
-        # campos que a API irá receber ou retornar
-        fields = [
-
-            "id",
-
-            # encaminhamento relacionado
-            "encaminhamento",
-
-            "tipo",
-
-            # arquivo enviado
-            "arquivo",
-
-            # descrição opcional
-            "descricao",
-
-            # data automática do upload
-            "data_upload"
-
-        ]
-
-        # data é apenas leitura
-        read_only_fields = [
-
-            "data_upload"
-        ]
-
-
-# Serializer para encaminhamentos
 class EncaminhamentoSerializer(serializers.ModelSerializer):
 
-    # -------------------------------------------------
-    # Campos legíveis
-    # -------------------------------------------------
-    paciente_nome = serializers.CharField(
-        source="paciente.nome",
-        read_only=True
-    )
-
-    especialidade_nome = serializers.CharField(
-        source="especialidade.nome",
-        read_only=True
-    )
-
-    procedimento_nome = serializers.CharField(
-        source="procedimento.nome",
-        read_only=True
-    )
-
-    # -------------------------------------------------
-    # Histórico de status do encaminhamento
-    # -------------------------------------------------
-    historico = HistoricoEncaminhamentoSerializer(
-        many=True,
-        read_only=True
-    )
-
-    tempos = serializers.SerializerMethodField()
-
-    # -------------------------------------------------
-    # Lista de arquivos anexados
-    # -------------------------------------------------
-    anexos = AnexoEncaminhamentoSerializer(
-        many=True,
-        read_only=True
-    )
-
-
+    paciente_nome = serializers.CharField(source="paciente.nome", read_only=True)
+    especialidade_nome = serializers.CharField(source="especialidade.nome", read_only=True)
 
     class Meta:
         model = Encaminhamento
-        # fields = "__all__"
-        fields = [
+        fields = "__all__"
+        read_only_fields = ["posicao_fila"]
 
-            'id',
-            'paciente',
-            'paciente_nome',
-            'tipo',
-            'especialidade',
-            'especialidade_nome',
-            'procedimento',
-            'procedimento_nome',
-            'profissional',
-            'prioridade',
-            'status',
-            'observacao',
-            'data_solicitacao',
-            'historico',
-            "anexos",
-            'tempos'
-        ]
+class EncaminhamentoCreateSerializer(serializers.ModelSerializer):
 
-    # -------------------------------------------------
-    # Validação para evitar duplicidade
-    # -------------------------------------------------
+    class Meta:
+        model = Encaminhamento
+        exclude = ["posicao_fila"]
+
     def validate(self, data):
 
         paciente = data.get("paciente")
         especialidade = data.get("especialidade")
-        procedimento = data.get("procedimento")
 
-        # -------------------------------------------------
-        # Verifica se já existe encaminhamento semelhante
-        # -------------------------------------------------
-        queryset = Encaminhamento.objects.filter(
+        request = self.context.get("request")
 
+        # 🔹 valida duplicidade
+        encaminhamento_existente = Encaminhamento.objects.filter(
             paciente=paciente,
             especialidade=especialidade,
-            procedimento=procedimento,
+            status__in=STATUS_FILA
+        ).first()
 
-            # apenas se ainda não foi realizado
-            status__in=[
-                "solicitado",
-                "aguardando",
-                "guia_disponivel"
-            ]
+        if encaminhamento_existente:
 
-        )
-        # -------------------------------------------------
-        # Se estiver editando (PUT/PATCH)
-        # remove o próprio registro da verificação
-        # -------------------------------------------------
-        if self.instance:
-            queryset = queryset.exclude(id=self.instance.id)
+            from auditoria.services import registrar_evento
 
-        if queryset.exists():
-
-            enc = queryset.first()
+            # 🔥 REGISTRA EVENTO (muito bom - nível avançado)
+            registrar_evento(
+                tipo="tentativa_duplicidade",
+                paciente=paciente,
+                usuario=request.user,
+                modelo="Encaminhamento",
+                descricao=f"Tentativa de duplicidade para {encaminhamento_existente.especialidade.nome}",
+                dados_extras={
+                    "especialidade_id": especialidade.id,
+                    "status_atual": encaminhamento_existente.status,
+                    "data_solicitacao": str(encaminhamento_existente.data_solicitacao)
+                }
+            )
 
             raise serializers.ValidationError({
-
-                "erro": "Paciente já possui encaminhamento ativo",
-
-                "posicao_fila": enc.posicao_fila,
-
-                "status": enc.status
-
+                "erro": "Já existe encaminhamento ativo",
+                "detalhes": {
+                    "especialidade": encaminhamento_existente.especialidade.nome,
+                    "status": encaminhamento_existente.status,
+                    "data": encaminhamento_existente.data_solicitacao
+                }
             })
+
         return data
 
-    def get_tempos(self, obj):
-
-        return obj.calcular_tempos()
-    
+# class EncaminhamentoCreateSerializer(serializers.ModelSerializer):
+#
+#     class Meta:
+#         model = Encaminhamento
+#         exclude=["posicao_fila"]
+#
+#
+#     def validate(self, data):
+#
+#         paciente = data.get("paciente")
+#         especialidade = data.get("especialidade")
+#
+#         request = self.context.get("request")
+#
+#         encaminhamento_existente = Encaminhamento.objects.filter(
+#             paciente=paciente,
+#             especialidade=especialidade,
+#             status__in=STATUS_FILA
+#         ).first()
+#
+#         if encaminhamento_existente:
+#
+#             from auditoria.services import registrar_evento
+#
+#             registrar_evento(
+#                 tipo="tentativa_duplicidade",
+#                 paciente=paciente,
+#                 usuario=request.user,
+#                 modelo="Encaminhamento",
+#                 descricao=f"Tentativa de duplicidade para {encaminhamento_existente.especialidade.nome}",
+#                 dados_extras={
+#                     "especialidade_id": especialidade.id,
+#                     "status_atual": encaminhamento_existente.status,
+#                     "data_solicitacao": str(encaminhamento_existente.data_solicitacao)
+#                 }
+#             )
+#
+#             raise serializers.ValidationError({
+#                 "erro": "Já existe encaminhamento ativo",
+#                 "detalhes": {
+#                     "especialidade": encaminhamento_existente.especialidade.nome,
+#                     "status": encaminhamento_existente.status,
+#                     "data": encaminhamento_existente.data_solicitacao
+#                 }
+#             })
+#
+#         return data

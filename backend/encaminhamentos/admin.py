@@ -1,108 +1,119 @@
+
 from django.contrib import admin
-from .models import AnexoEncaminhamento, Especialidade, Procedimento, Encaminhamento
+from .models import Especialidade, Encaminhamento, IndicadorDiario
 
 
-# Configuração do admin para Especialidade
+class FilaEsperaFilter(admin.SimpleListFilter):
+    title = ('Fila de Espera') # Nome que aparece no topo do filtro
+    parameter_name = 'status_fila' # O parâmetro que vai na URL
+
+    def lookups(self, request, model_admin):
+        # Opções que o usuário verá no menu lateral
+        return (
+            ('ativa', ('Apenas Fila de Espera')),
+        )
+
+    def queryset(self, request, queryset):
+        # Se o usuário clicar em "Apenas Fila de Espera"
+        if self.value() == 'ativa':
+            return queryset.filter(status__in=[
+                "solicitado",
+                "aguardando",
+                "enviado_regulacao",
+                "enviado_regulacao_upae",
+                "retornado_sem_vaga"
+            ])
+        return queryset
+
+
+@admin.register(Especialidade)
 class EspecialidadeAdmin(admin.ModelAdmin):
 
-    # Mostra o nome da especialidade
-    list_display = ('nome',)
-
-
-# Configuração do admin para Procedimento
-class ProcedimentoAdmin(admin.ModelAdmin):
-
-    # Mostra especialidade e nome do procedimento
     list_display = (
-        'nome',
-        'especialidade'
+        "nome",
+        "tipo",
+        "ativa",
     )
 
-    # Permite filtrar procedimentos pela especialidade
     list_filter = (
-        'especialidade',
+        "tipo",
+        "ativa"
     )
 
-# -------------------------------------------------
-# Inline para mostrar anexos no encaminhamento
-# -------------------------------------------------
-class AnexoInline(admin.TabularInline):
-
-    model = AnexoEncaminhamento
-
-    extra = 0
+    search_fields = (
+        "nome",
+    )
 
 
+
+
+# @admin.register(Fila)
+# class FilaAdmin(admin.ModelAdmin):
+#     list_display = (
+#         "paciente",
+#         "especialidade",
+#         "status",
+#         "prioridade",
+#         "posicao_fila",
+#         "data_solicitacao"
+#     )
+#
+#     def get_queryset(self, request):
+#         qs = super().get_queryset(request)
+#
+#         return qs.filter(status__in=[
+#             "solicitado",
+#             "aguardando",
+#             "enviado_regulacao",
+#             "enviado_regulacao_upae",
+#             "retornado_sem_vaga"
+#         ])
+
+@admin.register(Encaminhamento)
 class EncaminhamentoAdmin(admin.ModelAdmin):
 
-    # Colunas exibidas na lista
     list_display = (
-
-        'paciente',
-        'tipo',
-        'especialidade',
-        'procedimento',
-        'prioridade',
-        'status',
-        'data_solicitacao',
-        "possui_anexo",
-        "posicao_fila"
+        "paciente",
+        "especialidade",
+        "status",
+        "prioridade",
+        "posicao_fila",
+        "data_solicitacao"
     )
 
+    fields = (
+        "paciente",
+        "especialidade",
+        "data_solicitacao",
+        "profissional_solicitante",
+        "prioridade",
+        "status",
+        "observacao"
+    )
 
-     # mostra anexos dentro da tela do encaminhamento
-    inlines = [
-
-        AnexoInline
-    ]
-    # Filtros laterais
     list_filter = (
-        'tipo',
-        'status',
-        'prioridade',
-        'especialidade'
+        FilaEsperaFilter,
+        "especialidade",
+        "prioridade",
+        "status"
     )
 
-
-    # Campo de busca
     search_fields = (
-        'paciente__nome',
+        "paciente__nome",
     )
 
-    # -------------------------------------------------
-    # Verifica se o encaminhamento possui anexos
-    # obj é o objeto da linha do banco
-    # -------------------------------------------------
-    def possui_anexo(self, obj):
 
-        return obj.anexos.exists()
+    ordering = ("posicao_fila",)
 
-    # mostra ícone ✔ ou ✖ no admin
-    possui_anexo.boolean = True
 
-    # nome da coluna
-    possui_anexo.short_description = "Tem anexo?"
 
-# -------------------------------------------------
-# Admin dos anexos
-# -------------------------------------------------
-@admin.register(AnexoEncaminhamento)
-class AnexoEncaminhamentoAdmin(admin.ModelAdmin):
-
-    # campos mostrados na lista
+@admin.register(IndicadorDiario)
+class IndicadorAdmin(admin.ModelAdmin):
     list_display = (
-
-        "id",
-        "encaminhamento",
-        "descricao",
-        "data_upload"
-
+        "data",
+        "total_encaminhamentos",
+        "total_fila",
+        "tempo_medio_espera",
+        "tempo_maximo_espera",
+        "duplicidades_evitas"
     )
-
-
-
-
-# Registrando os modelos no painel admin
-admin.site.register(Especialidade, EspecialidadeAdmin)
-admin.site.register(Procedimento, ProcedimentoAdmin)
-admin.site.register(Encaminhamento, EncaminhamentoAdmin)

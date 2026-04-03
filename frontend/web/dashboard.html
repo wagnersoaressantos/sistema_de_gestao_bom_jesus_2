@@ -1,10 +1,39 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-br">
 <head>
-  <meta charset="UTF-8">
-  <title>$Title$</title>
+    <meta charset="UTF-8">
+    <title>Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-$END$
+
+<h2>Evolução da Fila</h2>
+
+<canvas id="grafico"></canvas>
+
+<script>
+async function carregarDados() {
+
+    const response = await fetch("/api/encaminhamentos/indicadores/");
+    const dados = await response.json();
+
+    const labels = dados.map(i => i.data);
+    const valores = dados.map(i => i.total_fila);
+
+    new Chart(document.getElementById("grafico"), {
+        type: "line",
+        data: {
+            labels: labels,
+            datasets: [{
+                label: "Pacientes na fila",
+                data: valores
+            }]
+        }
+    });
+}
+
+carregarDados();
+</script>
+
 </body>
 </html>

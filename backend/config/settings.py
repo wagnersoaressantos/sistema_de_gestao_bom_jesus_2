@@ -10,7 +10,6 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
-import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -21,7 +20,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-mpro3@5#v(e9@%#)d8vq#mz&570-46!drz8q$=@&27c0t=y=fu'
+SECRET_KEY = 'django-insecure-kq)d6pr58=fxl1(o5zr*2sks0l%k_z+va)6x3m!im6*fe$02!h'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -38,14 +37,6 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
-    'rest_framework',
-
-    'usuarios',
-    'pacientes',
-    'encaminhamentos',
-    'notificacoes',
-    'servicos',
 ]
 
 MIDDLEWARE = [
@@ -124,14 +115,3 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
-
-# -------------------------------------------------
-# Configuração de arquivos enviados
-# -------------------------------------------------
-
-# pasta onde os arquivos serão salvos
-MEDIA_ROOT = os.path.join(BASE_DIR, "media")
-
-# url de acesso aos arquivos
-MEDIA_URL = "/media/"
-
