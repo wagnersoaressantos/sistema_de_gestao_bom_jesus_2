@@ -15,47 +15,21 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from encaminhamentos.views import AnexoEncaminhamentoViewSet, demanda_reprimida, painel_fila, tempo_medio_espera
-from rest_framework.routers import DefaultRouter
-from pacientes.views import PacienteViewSet, historico_paciente
-from encaminhamentos.views import (
-    EspecialidadeViewSet,
-    ProcedimentoViewSet,
-    EncaminhamentoViewSet
+from django.urls import path,include
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
 )
-from django.urls import path, include
-from django.conf import settings
-from django.conf.urls.static import static
-
-
-
-
-router = DefaultRouter()
-
-router.register(r'pacientes', PacienteViewSet)
-router.register(r'especialidades', EspecialidadeViewSet)
-router.register(r'procedimentos', ProcedimentoViewSet)
-router.register(r'encaminhamentos', EncaminhamentoViewSet)
-router.register(r'anexos',AnexoEncaminhamentoViewSet)
-
-
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/', include(router.urls)),
-    path('api/demanda/', demanda_reprimida),
-    path('api/tempo-espera/', tempo_medio_espera),
-    path('api/painel/', painel_fila),
-    path('api/pacientes/<int:paciente_id>/historico/',historico_paciente),
+    path('api/usuarios/', include('usuarios.urls')),
+    path('api/pacientes/', include('pacientes.urls')),
+    path('api/encaminhamentos/', include('encaminhamentos.urls')),
+    path('api/auditoria/', include('auditoria.urls')),
 
+# LOGIN JWT
+    path('api/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]
-
-# -------------------------------------------------
-# Permite acessar arquivos enviados
-# -------------------------------------------------
-if settings.DEBUG:
-    urlpatterns += static(
-        settings.MEDIA_URL,
-        document_root=settings.MEDIA_ROOT
-    )
